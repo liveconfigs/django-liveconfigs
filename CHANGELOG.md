@@ -1,5 +1,14 @@
 # Change history
 
+## 05-09-2024 (v1.0.7)
+- added Django 5.1 support
+- added: async support
+- added: sync and async freeze (see examples in README)
+- parameter LIVECONFIGS_SYNCWRITE will be deprecated
+- new parameter LC_BACKGROUND_SAVE in project settings (instead of LIVECONFIGS_SYNCWRITE)
+- new parameter LC_LAST_READ_UPDATE_TTL in project settings
+- updated README
+
 ## 01-09-2024 (v1.0.6)
 - new repository address: https://github.com/liveconfigs/django-liveconfigs
 

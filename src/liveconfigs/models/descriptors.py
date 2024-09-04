@@ -7,6 +7,8 @@ from django.core import exceptions
 
 from liveconfigs.models.models import ConfigRow
 from liveconfigs.signals import config_row_update_signal
+from liveconfigs.tasks import async_config_row_update_or_create
+
 
 logger = logging.getLogger()
 
@@ -16,6 +18,7 @@ VALIDATORS_SUFFIX = "_VALIDATORS"
 
 
 CACHE_TTL = getattr(settings, 'LC_CACHE_TTL', 1)
+LAST_READ_UPDATE_TTL = getattr(settings, 'LC_LAST_READ_UPDATE_TTL', 60*60*24)
 
 
 class ConfigRowDescriptor:
@@ -44,7 +47,7 @@ class ConfigRowDescriptor:
                     update_fields['tags'] = self.tags
                 if db_row.topic != self.topic:
                     update_fields['topic'] = self.topic
-                if db_row.last_read is None or (db_row.last_read < dt_now - dt.timedelta(days=1)):
+                if db_row.last_read is None or (db_row.last_read < dt_now - dt.timedelta(seconds=LAST_READ_UPDATE_TTL)):
                     update_fields['last_read'] = dt_now
                 if db_row.default_value != self.default_value:
                     update_fields['default_value'] = self.default_value
@@ -72,6 +75,46 @@ class ConfigRowDescriptor:
         self.next_check = now + CACHE_TTL
         return self.last_value
 
+    async def __aget__(self, obj, klass=None):
+        now = time.time()
+        if not self.next_check or now > self.next_check:
+            dt_now = dt.datetime.now(tz=dt.timezone.utc)
+            try:
+                logger.info('accessing db to grab config %s', self.config_name)
+                db_row = await ConfigRow.objects.aget(name=self.config_name)
+                update_fields = {}
+                if db_row.description != self.description:
+                    update_fields['description'] = self.description
+                if db_row.tags != self.tags:
+                    update_fields['tags'] = self.tags
+                if db_row.topic != self.topic:
+                    update_fields['topic'] = self.topic
+                if db_row.last_read is None or (db_row.last_read < dt_now - dt.timedelta(seconds=LAST_READ_UPDATE_TTL)):
+                    update_fields['last_read'] = dt_now
+                if db_row.default_value != self.default_value:
+                    update_fields['default_value'] = self.default_value
+                if update_fields:
+                    await async_config_row_update_or_create(config_name=self.config_name, update_fields=update_fields)
+                self.last_value = db_row.value
+            except exceptions.ObjectDoesNotExist:
+                logger.warning('no config %s in db, using default value %s',
+                               self.config_name, self.default_value)
+                self.last_value = self.default_value
+                update_fields = {
+                    "name": self.config_name,
+                    "value": self.last_value,
+                    "description": self.description,
+                    "tags": self.tags,
+                    "topic": self.topic,
+                    "last_read": dt_now,
+                    "last_set": dt_now,
+                    "default_value": self.default_value,
+                }
+                await async_config_row_update_or_create(config_name=self.config_name, update_fields=update_fields)
+
+        self.next_check = now + CACHE_TTL
+        return self.last_value
+
 
 class ConfigMeta(type):
     """ Метакласс для конфигов. Подменяет все атрибуты на десктипторы """
@@ -94,7 +137,8 @@ class ConfigMeta(type):
 
         for n, v in dct.items():
             if (
-                not n.startswith('__')
+                n not in ('get', 'aget')
+                and not n.startswith('__')
                 and not n.endswith((DESCRIPTION_SUFFIX, TAGS_SUFFIX, VALIDATORS_SUFFIX))
             ):
                 if prefix and n in config_row_types:
@@ -122,3 +166,21 @@ class BaseConfig(metaclass=ConfigMeta):
     """От этого класса можно наследовать конфиги.
     За значениями этих конфигов система будет обращаться к БД и фоллбечиться
     на значения атрибутов, указаные в самом классе"""
+
+    def get(self):
+        frozen_values = {
+            k: (v.__get__(self, self))
+            for k, v in self.__class__.__dict__.items()
+            if hasattr(v, '__get__')
+        }
+        self.__dict__.update(frozen_values)
+        return self
+
+    async def aget(self):
+        frozen_values = {
+            k: (await v.__aget__(self, self))
+            for k, v in self.__class__.__dict__.items()
+            if hasattr(v, '__aget__')
+        }
+        self.__dict__.update(frozen_values)
+        return self

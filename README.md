@@ -22,7 +22,7 @@ if MyConfig.IS_FEATURE_ENABLED:
 
 Меняем через админку!
 
-![Экран редактирования конфига](https://github.com/factory5group/django-liveconfigs/blob/main/images/change_config.jpg?raw=true)
+![Экран редактирования конфига](https://github.com/liveconfigs/django-liveconfigs/blob/main/images/change_config.jpg?raw=true)
 
 
 ## Термины
@@ -51,7 +51,7 @@ if MyConfig.IS_FEATURE_ENABLED:
 + сохранение даты последних изменений и чтений конфигов
 + импорт и экспорт (удобно для тестирования системы)
 
-![Экран поиска и фильтрации конфигов](https://github.com/factory5group/django-liveconfigs/blob/main/images/filter_config.jpg?raw=true)
+![Экран поиска и фильтрации конфигов](https://github.com/liveconfigs/django-liveconfigs/blob/main/images/filter_config.jpg?raw=true)
 
 ## Как начать пользоваться
 1. Установите пакет `django-liveconfigs` через pip, poetry или еще как-нибудь.
@@ -209,10 +209,10 @@ if FirstExample.MY_FIRST_CONFIG > 20:
  3. Если используете не Celery, то адаптируйте этот код под ваш случай
 
 ## Остались вопросы?
-+ Посмотрите примеры использования конфигов: https://github.com/factory5group/django-liveconfigs-example/
++ Посмотрите примеры использования конфигов: https://github.com/liveconfigs/django-liveconfigs-example/
 
-+ Примеры использования валидаторов : https://github.com/factory5group/django-liveconfigs-example/
++ Примеры использования валидаторов : https://github.com/liveconfigs/django-liveconfigs-example/
 
-+ Примеры валидаторов : `validators.py` в https://github.com/factory5group/django-liveconfigs/
++ Примеры валидаторов : `validators.py` в https://github.com/liveconfigs/django-liveconfigs/
 
 + Напишите нам! 

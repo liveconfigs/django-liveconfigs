@@ -21,7 +21,7 @@ class JSONField(forms.JSONField):
 class JSONWidget(widgets.Textarea):
     def format_value(self, value):
         try:
-            value = json.dumps(json.loads(value), indent=2, sort_keys=True)
+            value = json.dumps(json.loads(value), ensure_ascii=False, indent=2, sort_keys=True)
             # these lines will try to adjust size of TextArea to fit to content
             row_lengths = [len(r) for r in value.split('\n')]
             self.attrs['rows'] = min(max(len(row_lengths) + 2, 10), 30)

@@ -51,8 +51,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/factory5group/django-liveconfigs"
-"Documentation" = "https://github.com/factory5group/django-liveconfigs/blob/main/README.md"
-"Repository" = "https://github.com/factory5group/django-liveconfigs"
-"Changelog" = "https://github.com/factory5group/django-liveconfigs/blob/main/CHANGELOG.md"
-"Bug Tracker" = "https://github.com/factory5group/django-liveconfigs/issues"
+"Homepage" = "https://github.com/liveconfigs/django-liveconfigs"
+"Documentation" = "https://github.com/liveconfigs/django-liveconfigs/blob/main/README.md"
+"Repository" = "https://github.com/liveconfigs/django-liveconfigs"
+"Changelog" = "https://github.com/liveconfigs/django-liveconfigs/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/liveconfigs/django-liveconfigs/issues"

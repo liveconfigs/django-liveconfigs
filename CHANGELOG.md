@@ -1,6 +1,6 @@
 # Change history
 
-## 05-09-2024 (v1.0.7)
+## 05-09-2024 (v2.0.0)
 - added Django 5.1 support
 - added: async support
 - added: sync and async freeze (see examples in README)

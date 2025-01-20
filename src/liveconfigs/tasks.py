@@ -10,3 +10,8 @@ def config_row_update_or_create(config_name: str, update_fields: dict):
     _, created = ConfigRow.objects.update_or_create(
         name=config_name, defaults=update_fields)
     return f"{config_name} was {'saved to DB' if created else 'updated in DB'}"
+
+async def async_config_row_update_or_create(config_name: str, update_fields: dict):
+    logger.info('save data to config %s', config_name)
+    _, created = await ConfigRow.objects.aupdate_or_create(name=config_name, defaults=update_fields)
+    return f"{config_name} was {'saved to DB' if created else 'updated in DB'}"

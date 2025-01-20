@@ -1,6 +1,7 @@
 # LiveConfigs
 
 LiveConfigs помогает настраивать приложение "на лету" через django-админку без перевыкатки и перезапуска. 
+
 Сама конфигурация хранится в БД, но для разработчика скрыта за удобным программным интерфейсом.
 
 ## Быстрый пример
@@ -16,13 +17,16 @@ class MyConfig(liveconfigs.BaseConfig):
 Используем их
 
 ```python
-if MyConfig.IS_FEATURE_ENABLED:
-   print('feature is enabled and feature value is', MyConfig.NEW_FEATURE_VALUE)
+my_config = config.MyConfig().get()
+if my_config.IS_FEATURE_ENABLED:
+   print('feature is enabled and feature value is', my_config.NEW_FEATURE_VALUE)
 ```
 
-Меняем через админку!
+Меняем и отслеживаем изменения через админку!
 
 ![Экран редактирования конфига](https://github.com/liveconfigs/django-liveconfigs/blob/main/images/change_config.jpg?raw=true)
+
+![История изменений конфигов](https://github.com/liveconfigs/django-liveconfigs/blob/main/images/history.jpg?raw=true)
 
 
 ## Термины
@@ -53,43 +57,111 @@ if MyConfig.IS_FEATURE_ENABLED:
 
 ![Экран поиска и фильтрации конфигов](https://github.com/liveconfigs/django-liveconfigs/blob/main/images/filter_config.jpg?raw=true)
 
-## Как начать пользоваться
-1. Установите пакет `django-liveconfigs` через pip, poetry или еще как-нибудь.
-```bash
-pip install django-liveconfigs
+## Установка
+### 1. Выполните установку пакета через pip, poetry или другим способом
+```
+ pip install django-liveconfigs
 ```
 
-2. Добавьте "liveconfigs" в INSTALLED_APPS в settings:
+### 2. В настройках проекта:
+- **ВКЛЮЧИТЕ `liveconfigs` В РАЗДЕЛЕ ПРИЛОЖЕНИЙ, ДОБАВИВ ДВЕ СТРОКИ:**
 ```python
-    INSTALLED_APPS = [
-        ...,
-        "import_export",
-        "liveconfigs",
-    ]
+INSTALLED_APPS = [
+    ...
+    "import_export",
+    "liveconfigs",
+]
 ```
 
-3. Добавьте в settings еще несколько строк.
+- **ДОБАВЬТЕ НАСТРОЙКИ**
+
+> Если вас устраивают значения по умолчанию (они использованы ниже), то настройку можно не описывать.
+
 ```python
-    # liveconfigs settings
-    # Максимальная длина текста в значении конфига при которой отображать поле редактирования конфига как textinput
-    # При длине текста в значении конфига большей этого значения - отображать поле редактирования конфига как textarea
-    LC_MAX_STR_LENGTH_DISPLAYED_AS_TEXTINPUT = 50
-    LC_ENABLE_PRETTY_INPUT = True
-    LIVECONFIGS_SYNCWRITE = True    # sync write mode
-    LC_CACHE_TTL = 1    # cache TTL in seconds (default = 1)
-    # Максимальная длина значения конфига (в текстовом представлении) при которой значение в списке выводится целиком
-    # При бОльшей длине визуал значения будет усечен ("Длинная строка" -> "Длин ... рока")
-    LC_MAX_VISUAL_VALUE_LENGTH = 50
+LC_BACKGROUND_SAVE = False
 ```
+Этот параметр отвечает за режим записи вспомогательных данных (время изменения, время последнего доступа к конкретному конфигу) в базу данных.
 
-4. Заведите себе файл собственно с конфигами, например `config/config.py`
+`True` - сохранение происходит в фоне через сигнал (например, в Celery)
+
+`False` - сохранение происходит в основном потоке программы
+
+> При асинхронной заморозке сохранение всегда происходит в "основном потоке" (синхронная или асинхронная функция)
+
+```python
+LC_CACHE_TTL = 1
+```
+Время (в секундах) в течение которого кешированное значение конфига валидно
+
+```python
+LC_LAST_READ_UPDATE_TTL = 60*60*24
+```
+Минимальный период (в секундах) между обновлениями даты чтения конфига в БД.
+
+В примере: информация о дате последнего чтения конфига будет обновляться не чаще 1 раза в сутки.
+
+```python
+LC_ENABLE_PRETTY_INPUT = False
+```
+Этот параметр отвечает за включение "типизированных" (основанных на типе конфига) полей ввода при редактировании конфига в админке.
+
+> Не работает при использовании Union в типе конфига
+
+```python
+LC_MAX_VISUAL_VALUE_LENGTH = 0
+```
+Максимальная длина значения конфига (в текстовом представлении) при которой значение в списке выводится целиком. 
+При бОльшей длине визуал значения будет усечен ("Длинная строка" -> "Длин ... рока")
+> 0 - настройка отключена
+
+```python
+LC_MAX_VISUAL_VALUE_LENGTH = 50
+```
+Максимальная длина текста в значении конфига при которой отображать поле редактирования конфига как `textinput` (однострочный редактор)
+
+При длине текста в значении конфига большей этого значения - отображать поле редактирования конфига как `textarea` (многострочный редактор)
+
+> Используется для конфигов с типом `str`
+
+## Использование
+
+### 1. Создайте файл с конфигами в удобном месте проекта
+
+Например, файл `config.py` в директории `config`, созданной на верхнем уровне проекта.
+
+### 2. Отредактируйте файл с конфигами
+
+> Упрощенный вариант для `LC_BACKGROUND_SAVE = False`:
+
 ```python
 from liveconfigs import models
-from liveconfigs.validators import greater_than
+from liveconfigs.validators import greater_than # используйте нужные вам валидаторы
 from enum import Enum
 
 # isort: off
+# config_row_update_signal_handler begin
+from django.conf import settings
+from django.dispatch import receiver
+from liveconfigs.signals import config_row_update_signal
+from liveconfigs.tasks import config_row_update_or_create
+# isort: on
 
+
+@receiver(config_row_update_signal, dispatch_uid="config_row_update_signal")
+def config_row_update_signal_handler(sender, config_name, update_fields, **kwargs):
+    config_row_update_or_create(config_name, update_fields)
+
+# config_row_update_signal_handler end
+```
+
+> Полный вариант для `LC_BACKGROUND_SAVE = True`:
+
+```python
+from liveconfigs import models
+from liveconfigs.validators import greater_than # используйте нужные вам валидаторы
+from enum import Enum
+
+# isort: off
 # config_row_update_signal_handler begin
 from django.conf import settings
 from django.dispatch import receiver
@@ -99,7 +171,6 @@ from liveconfigs.tasks import config_row_update_or_create
 # FIXME: Импорт приложения Celery из вашего проекта (если используете Celery)
 # FIXME: Вам нужно изменить этот код, если вы используете не Celery
 from celery_app import app
-
 # isort: on
 
 # Пример для Celery
@@ -114,21 +185,26 @@ def config_row_update_or_create_proxy(config_name: str, update_fields: dict):
 
 @receiver(config_row_update_signal, dispatch_uid="config_row_update_signal")
 def config_row_update_signal_handler(sender, config_name, update_fields, **kwargs):
+    LIVECONFIGS_SYNCWRITE = getattr(settings, 'LIVECONFIGS_SYNCWRITE', 'True')
+    LC_BACKGROUND_SAVE = getattr(settings, 'LC_BACKGROUND_SAVE', 'False')
+    background_save = LC_BACKGROUND_SAVE if hasattr(settings, 'LC_BACKGROUND_SAVE') else not LIVECONFIGS_SYNCWRITE
+
     # Пример для Celery
-    # При настройках для синхронного сохранения функция будет вызвана напрямую
-    if settings.LIVECONFIGS_SYNCWRITE:
-        config_row_update_or_create_proxy_func = config_row_update_or_create_proxy
-    # При настройках для асинхронного сохранения функция будет вызвана через delay
+    # При настройках для фонового сохранения функция будет вызвана через delay
     # FIXME: Вам нужно изменить этот код, если вы используете не Celery
-    else:
+    if background_save:
         config_row_update_or_create_proxy_func = config_row_update_or_create_proxy.delay
+    # При настройках для синхронного сохранения функция будет вызвана напрямую
+    else:
+        config_row_update_or_create_proxy_func = config_row_update_or_create_proxy
 
     config_row_update_or_create_proxy_func(config_name, update_fields)
 
-
 # config_row_update_signal_handler end
+```
 
-
+### 3. Создайте нужные конфиги в файле
+```python
 # тут перечислены возможные теги для настроек из вашей предметной области
 class ConfigTags(str, Enum):
     front = "Настройки для фронта"
@@ -149,15 +225,21 @@ class FirstExample(models.BaseConfig):
     SECOND_ONE: bool = False  
 ```
 
-5. Используете где-нибудь `FirstExample.MY_FIRST_CONFIG` как обычный int:
+### 4. Используйте конфиги в коде
+
 ```python
 from config.config import FirstExample
 ...
-if FirstExample.MY_FIRST_CONFIG > 20:
+# в синхронном коде
+first_example = FirstExample().get()
+# в асинхронном коде
+first_example = await FirstExample().aget()
+...
+if first_example.MY_FIRST_CONFIG > 20:
     print("Hello there!")
 ```
 
-## Просмотр и редактирование конфигов в админке django
+## Просмотр и редактирование
 Редактировать значения конфигов можно по адресу
  http://YOUR_HOST/admin/liveconfigs/configrow/
 
@@ -165,13 +247,9 @@ if FirstExample.MY_FIRST_CONFIG > 20:
 дополнительные валидаторы
 
 ## Автоматическая загрузка новых конфигов в БД
-При первом обращении к настройке приложение проверяет,
-есть ли запись о них в БД. Если ее нет, то конфиг записывается
-в БД со значением по-умолчанию.
+При первом обращении к настройке приложение проверяет, есть ли запись о ней в БД. Если ее нет, то конфиг записывается в БД со значением по-умолчанию.
 
-Если по какой-то причине вы не хотите ждать, то залить все новые конфиги 
-в БД можно и на старте сервиса, добавив
-в ваш скрипт запуска вызов команды load_config:
+Если по какой-то причине вы не хотите ждать, то залить все новые конфиги в БД можно и на старте сервиса, добавив в ваш скрипт запуска вызов команды `load_config`:
 
 ```sh
     # какие-то старые команды
@@ -186,27 +264,12 @@ if FirstExample.MY_FIRST_CONFIG > 20:
 ```
 
 ## Даты последнего изменения и чтения
-В БД у каждой настройки есть два дополнительных поля - даты последнего чтения
-и записи. Они помогают определить в живой системе, нужны ли все еще какие-то настройки
-или пора уже от них избавиться.
-### Асинхронная запись
-Чтобы запись последней даты чтения не тормозила вам всю систему (если,например, конфиги часто читаются разными частями кода),
-можно вынести ее в задачу celery. Для этого:
- 1. Установите переменную LIVECONFIGS_SYNCWRITE в `settings.py` в False:
- ```
-     LIVECONFIGS_SYNCWRITE = False   # async write mode
- ```
- 
- 2. Если используете Celery, то настройте запуск задачи `config.config.config_row_update_or_create_proxy`:
- ```python
-     CELERY_TASK_ROUTES = {
-         'config.config.config_row_update_or_create_proxy': {
-             'queue': 'quick', 'routing_key': 'quick'
-         },
-     }
- ```
+В БД у каждой настройки есть два дополнительных поля - даты последнего чтения и записи. Они помогают определить в живой системе, нужны ли все еще какие-то настройки или пора уже от них избавиться.
 
- 3. Если используете не Celery, то адаптируйте этот код под ваш случай
+## Ограничения
+- Для Django < 4 поддерживается только Postgres
+- Для Django < 4.2 асинхронная заморозка может не работать
+- Фоновое сохранение данных о последнем чтении конфига не работает в асинхронной заморозке
 
 ## Остались вопросы?
 + Посмотрите примеры использования конфигов: https://github.com/liveconfigs/django-liveconfigs-example/
